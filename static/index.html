@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>chitest demo</title>
+    <link href="/bootstrap.min.css" rel="stylesheet">
+    <script src="/htmx.min.js"></script>
+    <script src="/bootstrap.bundle.min.js"></script>
+</head>
+
+<body>
+    <div class="container" hx-get="/hello" hx-trigger="load">
+        <h1>Hello, world!</h1>
+    </div>
+</body>
+
+</html>
