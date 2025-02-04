@@ -1,7 +1,6 @@
 package main
 
 import (
-	"compress/flate"
 	"embed"
 	"fmt"
 	"html/template"
@@ -16,35 +15,51 @@ import (
 //go:embed static template
 var files embed.FS
 
-type TemplateHandler struct {
+type server struct {
+	router *chi.Mux
 	template *template.Template
 }
 
 func main() {
 
-	static, _ := fs.Sub(files, "static")
-	template, err := template.ParseFS(files, "template/*.html")
+	s, err := CreateServer()
 	if err != nil {
 		panic(err)
 	}
 
-	handler := &TemplateHandler{template: template}
-
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.NewCompressor(flate.DefaultCompression).Handler)
-	r.Handle("/*", http.FileServer(http.FS(static)))
-
-	r.Get("/hello", handler.hello)
-
 	fmt.Println("Starting server on :8080")
-
-	if err = http.ListenAndServe(":8080", r); err != nil {
+	if err := http.ListenAndServe(":8080", s.router); err != nil {
 		panic(err)
 	}
 
 }
 
-func (h *TemplateHandler) hello(w http.ResponseWriter, r *http.Request) {
-	h.template.ExecuteTemplate(w, "hello", nil)
+func CreateServer() (*server, error) {
+
+	static, err := fs.Sub(files, "static")
+	if err != nil {
+		return nil, err
+	}
+
+	template, err := template.ParseFS(files, "template/*.html")
+	if err != nil {
+		return nil, err
+	}
+
+	s := &server{
+		router: chi.NewRouter(),
+		template: template,
+	}
+
+	s.router.Use(middleware.Logger)
+
+	s.router.Handle("/*", http.FileServer(http.FS(static)))
+
+	s.router.Get("/hello", s.hello)
+
+	return s, nil
+}
+
+func (s *server) hello(w http.ResponseWriter, r *http.Request) {
+	s.template.ExecuteTemplate(w, "hello", nil)
 }
