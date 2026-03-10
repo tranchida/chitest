@@ -8,16 +8,16 @@ import (
 	"io/fs"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
+	echomw "github.com/labstack/echo/v4/middleware"
 )
 
 //go:embed static template
 var files embed.FS
 
 type server struct {
-	router   *chi.Mux
+	router   *echo.Echo
 	template *template.Template
 }
 
@@ -29,47 +29,54 @@ func main() {
 	}
 
 	fmt.Println("Starting server on :8080")
-	if err := http.ListenAndServe(":8080", s.router); err != nil {
+	if err := s.router.Start(":8080"); err != nil {
 		panic(err)
 	}
 
 }
 
 // Middleware pour logger les headers en entrée et en sortie
-func logHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func logHeaders(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
 		// Logger les headers en entrée
-		fmt.Println("\n=== Headers en entrée ===")
-		for name, values := range r.Header {
+		fmt.Println("=== Headers en entrée ===")
+		for name, values := range c.Request().Header {
 			for _, value := range values {
 				fmt.Printf("%s: %s\n", name, value)
 			}
 		}
-		fmt.Print("========================\n\n")
+		fmt.Println("========================")
 
-		// Wrapper pour capturer les headers en sortie
-		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-		next.ServeHTTP(ww, r)
+		// appel du handler
+		if err := next(c); err != nil {
+			c.Error(err)
+		}
 
 		// Logger les headers en sortie
-		fmt.Println("\n=== Headers en sortie ===")
-		for name, values := range ww.Header() {
+		fmt.Println("=== Headers en sortie ===")
+		for name, values := range c.Response().Header() {
 			for _, value := range values {
 				fmt.Printf("%s: %s\n", name, value)
 			}
 		}
-		fmt.Print("========================\n\n")
-	})
+		fmt.Println("========================")
+
+		return nil
+	}
 }
 
 // Middleware pour ajouter un identifiant unique à chaque requête
-func requestID(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func requestID(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
 		id := uuid.New().String()
-		ctx := context.WithValue(r.Context(), "requestID", id)
-		w.Header().Set("X-Request-ID", id)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+		// stocker dans le context Echo et header de réponse
+		c.Set("requestID", id)
+		c.Response().Header().Set("X-Request-ID", id)
+		// propagate context if needed
+		ctx := context.WithValue(c.Request().Context(), "requestID", id)
+		c.SetRequest(c.Request().WithContext(ctx))
+		return next(c)
+	}
 }
 
 func CreateServer() (*server, error) {
@@ -84,24 +91,30 @@ func CreateServer() (*server, error) {
 		return nil, err
 	}
 
+	e := echo.New()
 	s := &server{
-		router:   chi.NewRouter(),
+		router:   e,
 		template: template,
 	}
 
-	// Ajout du middleware requestID en premier
-	s.router.Use(requestID)
-	s.router.Use(logHeaders)
-	s.router.Use(middleware.Logger)
+	// Middlewares Echo
+	e.Use(echomw.Recover())
+	e.Use(requestID)
+	e.Use(echomw.Logger())
+	e.Use(logHeaders)
 
-	s.router.Handle("/*", http.FileServer(http.FS(static)))
+	// Servir les fichiers statiques via http.FileServer en utilisant l'embed FS
+	e.GET("/*", echo.WrapHandler(http.FileServer(http.FS(static))))
 
-	s.router.Get("/hello", s.hello)
+	e.GET("/hello", s.hello)
 
 	return s, nil
 }
 
-func (s *server) hello(w http.ResponseWriter, r *http.Request) {
+func (s *server) hello(c echo.Context) error {
 	message := "ceci est un message de test"
-	s.template.ExecuteTemplate(w, "hello", map[string]string{"Message": message})
+	if err := s.template.ExecuteTemplate(c.Response().Writer, "hello", map[string]string{"Message": message}); err != nil {
+		return err
+	}
+	return nil
 }
