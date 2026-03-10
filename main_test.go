@@ -12,7 +12,7 @@ func TestHelloHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Creating server failed: %v", err)
 	}
-	
+
 	// Create a new request targeting the /hello route.
 	req, err := http.NewRequest("GET", "/hello", nil)
 	if err != nil {
@@ -50,5 +50,25 @@ func TestStaticFileHandler(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("Static file handler returned wrong status code: got %v want %v", rr.Code, http.StatusOK)
+	}
+}
+
+func TestRequestIDHeader(t *testing.T) {
+	s, err := CreateServer()
+	if err != nil {
+		t.Fatalf("Creating server failed: %v", err)
+	}
+
+	req, err := http.NewRequest("GET", "/hello", nil)
+	if err != nil {
+		t.Fatalf("Creating request failed: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	s.router.ServeHTTP(rr, req)
+
+	header := rr.Header().Get("X-Request-ID")
+	if header == "" {
+		t.Errorf("X-Request-ID header is missing or empty")
 	}
 }

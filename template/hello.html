@@ -1,3 +1,9 @@
 {{ define "hello" }}
-<h1>Bonjour tous le monde !</h1>
+<div class="card shadow-sm mt-5">
+    <div class="card-body text-center">
+        <h1 class="display-4 mb-4 text-primary">👋 Bonjour tout le monde !</h1>
+        <p class="lead">{{ .Message }}</p>
+        <a href="/" class="btn btn-outline-primary mt-3">Accueil</a>
+    </div>
+</div>
 {{ end }}
